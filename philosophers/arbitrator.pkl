@@ -1,0 +1,69 @@
+import "https://raw.githubusercontent.com/CollaborativeStateMachines/Cirrina/refs/heads/develop/src/main/resources/pkl/csm/Csml.pkl"
+
+class StateMachine extends Csml.StateMachineDescription {
+  name = "arbitrator"
+  localContext {
+    variables {
+      new {
+        name = "allocated"
+        value = "[...]"
+      }
+    }
+  }
+  states {
+   new Csml.StateDescription {
+     name = "waitingForRequests"
+     initial = true
+     on {
+         new Csml.OnTransitionDescription {
+           event = "requesting"
+           guards {
+             new Csml.GuardDescription {
+               expression = "utility:notIn(\("allocated"), $fork, $fork + 1)"
+             }
+           }
+           actions {
+             new Csml.AssignActionDescription {
+               variable = new {
+                 name = "allocated"
+                 value = "utility:addToList(\("allocated"), $fork, $fork + 1)"
+               }
+             }
+             new Csml.RaiseActionDescription {
+               event {
+                 name = "allocated"
+                 data {
+                   new {
+                     name = "fork"
+                     value = "$fork"
+                   }
+                   new {
+                     name = "fork2"
+                     value = "$fork + 1"
+                   }
+                 }
+                 channel = "global"
+               }
+             }
+           }
+         }
+       new Csml.OnTransitionDescription {
+         event = "finished"
+         guards {
+           new Csml.GuardDescription {
+             expression = "utility:in(\("allocated"), $fork, $fork + 1)"
+           }
+         }
+         actions {
+           new Csml.AssignActionDescription {
+             variable = new {
+               name = "allocated"
+               value = "utility:removeFromList(\("allocated"), $fork, $fork + 1)"
+             }
+           }
+         }
+       }
+     }
+   }
+  }
+}
