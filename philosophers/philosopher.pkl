@@ -67,7 +67,7 @@ class StateMachine extends Csml.StateMachineDescription {
              expression = "counter > 16000"
            }
          }
-         target = "requestingFork"
+         target = "leave"
        }
      }
    }
