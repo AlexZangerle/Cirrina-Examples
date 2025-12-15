@@ -19,14 +19,14 @@ class StateMachine extends Csml.StateMachineDescription {
            event = "requesting"
            guards {
              new Csml.GuardDescription {
-               expression = "utility:notIn(\("allocated"), $fork, $fork + 1)"
+               expression = "utility:notIn(\("allocated"), $forkOne, ($forkOne + 1) % 6)"
              }
            }
            actions {
              new Csml.AssignActionDescription {
                variable = new {
                  name = "allocated"
-                 value = "utility:addToList(\("allocated"), $fork, $fork + 1)"
+                 value = "utility:addToList(\("allocated"), $forkOne, ($forkOne + 1) % 6)"
                }
              }
              new Csml.RaiseActionDescription {
@@ -34,12 +34,8 @@ class StateMachine extends Csml.StateMachineDescription {
                  name = "allocated"
                  data {
                    new {
-                     name = "fork"
-                     value = "$fork"
-                   }
-                   new {
-                     name = "fork2"
-                     value = "$fork + 1"
+                     name = "forkOne"
+                     value = "$forkOne"
                    }
                  }
                  channel = "global"
@@ -48,17 +44,39 @@ class StateMachine extends Csml.StateMachineDescription {
            }
          }
        new Csml.OnTransitionDescription {
+         event = "requesting"
+         guards {
+           new {
+             expression = "!utility:notIn(\("allocated"), $forkOne, ($forkOne + 1) % 6)"
+           }
+         }
+         actions {
+           new Csml.RaiseActionDescription {
+             event {
+               name = "denied"
+               data {
+                 new {
+                   name = "forkOne"
+                   value = "$forkOne"
+                 }
+               }
+               channel = "global"
+             }
+           }
+         }
+       }
+       new Csml.OnTransitionDescription {
          event = "finished"
          guards {
            new Csml.GuardDescription {
-             expression = "utility:in(\("allocated"), $fork, $fork + 1)"
+             expression = "utility:in(\("allocated"), $forkOne, ($forkOne + 1) % 6)"
            }
          }
          actions {
            new Csml.AssignActionDescription {
              variable = new {
                name = "allocated"
-               value = "utility:removeFromList(\("allocated"), $fork, $fork + 1)"
+               value = "utility:removeFromList(\("allocated"), $forkOne, ($forkOne + 1) % 6)"
              }
            }
          }

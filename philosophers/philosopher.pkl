@@ -12,64 +12,78 @@ class StateMachine extends Csml.StateMachineDescription {
     }
   }
   states {
-   new Csml.StateDescription {
+   new {
      name = "requestingFork"
      initial = true
-     after {
-       new Csml.TimeoutActionDescription {
-         name = "requestFork"
-         delay = "100"
-         action = new Csml.RaiseActionDescription {
-           event {
-             name = "requesting"
-             data {
-               new {
-                 name = "fork"
-                 value = self.name
-               }
+     entry {
+       new Csml.AssignActionDescription {
+         variable = new {
+           name = "counter"
+           value = "counter + 1"
+         }
+       }
+       new Csml.RaiseActionDescription {
+         event {
+           name = "requesting"
+           data {
+             new {
+               name = "forkOne"
+               value = self.name
              }
-             channel = "global"
            }
+           channel = "global"
          }
        }
      }
      on {
-         new Csml.OnTransitionDescription {
+         new  {
            event = "allocated"
            guards {
-             new Csml.GuardDescription {
-               expression = "$fork == \(self.name) && $fork2 == \(self.name) + 1"
+             new {
+               expression = "$forkOne == \(self.name) && ($forkOne + 1) % 6 == (\(self.name) + 1) % 6"
              }
            }
            target = "eating"
          }
+       new {
+         event = "denied"
+         guards {
+           new {
+             expression = "$forkOne == \(self.name) && ($forkOne + 1) % 6 == (\(self.name) + 1) % 6"
+           }
+           new {
+             expression = "counter <= 16000"
+           }
+         }
+         target = "requestingFork"
+       }
+       new {
+         event = "denied"
+         guards {
+           new {
+             expression = "$forkOne == \(self.name) && ($forkOne + 1) % 6 == (\(self.name) + 1) % 6"
+           }
+           new {
+             expression = "counter > 16000"
+           }
+         }
+         target = "requestingFork"
+       }
      }
    }
     new Csml.StateDescription {
       name = "eating"
       entry {
-        new Csml.AssignActionDescription {
-          variable = new {
-            name = "counter"
-            value = "counter + 1"
-          }
-        }
-      }
-      after {
-        new Csml.TimeoutActionDescription {
-          name = "finishedEating"
-          delay = "100"
-          action = new Csml.RaiseActionDescription {
-            event {
-              name = "finished"
-              data {
-                new {
-                  name = "fork"
-                  value = self.name
-                }
+        new Csml.RaiseActionDescription {
+          event {
+            name = "finished"
+            data {
+              new {
+                name = "forkOne"
+                value = self.name
               }
-              channel = "global"
             }
+            channel = "global"
           }
         }
       }
@@ -78,10 +92,10 @@ class StateMachine extends Csml.StateMachineDescription {
           event = "finished"
           guards {
             new Csml.GuardDescription {
-              expression = "$fork == \(self.name)"
+              expression = "$forkOne == \(self.name) && ($forkOne + 1) % 6 == (\(self.name) + 1) % 6"
             }
             new Csml.GuardDescription {
-              expression = "counter < 100"
+              expression = "counter <= 16000"
             }
           }
           target = "requestingFork"
@@ -90,10 +104,10 @@ class StateMachine extends Csml.StateMachineDescription {
           event = "finished"
           guards {
             new Csml.GuardDescription {
-              expression = "$fork == \(self.name)"
+              expression = "$forkOne == \(self.name) && ($forkOne + 1) % 6 == (\(self.name) + 1) % 6"
             }
             new Csml.GuardDescription {
-              expression = "counter >= 100"
+              expression = "counter > 16000"
             }
           }
           target = "leave"
