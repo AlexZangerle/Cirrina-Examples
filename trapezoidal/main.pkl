@@ -1,0 +1,14 @@
+amends
+  "https://raw.githubusercontent.com/CollaborativeStateMachines/Cirrina/refs/heads/develop/src/main/resources/pkl/csm/csml.pkl"
+
+import "defs.pkl"
+import "master.pkl"
+import "worker.pkl"
+
+version = "4.0.0"
+stateMachines {
+  ["master"] = master.sm
+  for (w in defs.workers) {
+    [w] = worker.createWorker(w)
+  }
+}

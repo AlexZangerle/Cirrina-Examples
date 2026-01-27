@@ -1,0 +1,85 @@
+import
+  "https://raw.githubusercontent.com/CollaborativeStateMachines/Cirrina/refs/heads/develop/src/main/resources/pkl/csm/csml.pkl"
+
+sm = new csml.StateMachine {
+  transient {
+    ["workers"] = "[...]"
+    ["numTermsReceived"] = "0"
+    ["resultArea"] = "0.0"
+    ["l"] = "1"
+    ["r"] = "5"
+    ["n"] = "1000000"
+    ["precision"] = "0.0"
+    ["worksSent"] = "0"
+    ["workerRange"] = "0.0"
+    ["wl"] = "0.0"
+    ["wr"] = "0.0"
+  }
+  states {
+    ["registerWorkers"] = new csml.Initial {
+      entry {
+        new csml.Eval { expression = " precision = (r-l) / n" }
+      }
+      on {
+        ["register"] = new csml.Transition {
+          to = "registerWorkers"
+          iif = "workers.size() != 0"
+          do {
+            new csml.Eval { expression = "workers + [$workerId]" }
+          }
+          or = "registerAll"
+        }
+      }
+    }
+    ["registerAll"] = new csml.State {
+      always {
+        new csml.Transition {
+          to = "sendWorker"
+          do {
+            new csml.Raise { event = new csml.Global { topic = "allRegistered" } }
+            new csml.Eval { expression = "workerRange = (r-l) / workers.size()" }
+          }
+        }
+      }
+    }
+    ["sendWorker"] = new csml.State {
+      always {
+        new csml.Transition {
+          to = "sendWorker"
+          iif = "worksSent != workers.size()"
+          do {
+            new csml.Eval { expression = "wl = (workerRange * worksSent) + l" }
+            new csml.Eval { expression = "wr = wl + workerRange" }
+            new csml.Eval { expression = "worksSent = worksSent + 1" }
+            new csml.Raise {
+              event = new csml.Global {
+                topic = "work"
+                data {
+                  ["wl"] = "wl"
+                  ["wr"] = "wr"
+                  ["worksSent"] = "worksSent"
+                  ["precision"] = "precision"
+                }
+              }
+            }
+          }
+          or = "receiveWorks"
+        }
+      }
+    }
+    ["receiveWorks"] = new csml.State {
+      on {
+        ["workDone"] = new csml.Transition {
+          to = "receiveWorks"
+          iif = "numTermsReceived != 0"
+          do {
+            new csml.Eval { expression = "numTermsReceived += 1" }
+            new csml.Eval { expression = "resultArea += $result" }
+          }
+          or = "terminate"
+        }
+      }
+    }
+    ["terminate"] = new csml.Terminal {}
+  }
+}

@@ -1,0 +1,38 @@
+import
+  "https://raw.githubusercontent.com/CollaborativeStateMachines/Cirrina/refs/heads/develop/src/main/resources/pkl/csm/csml.pkl"
+
+function createWorker(id: String) = new csml.StateMachine {
+  transient {
+    ["workerId"] = id
+    ["n"] = "0"
+    ["accumArea"] = "0.0"
+  }
+  states {
+    ["registerWorkers"] = new csml.Initial {
+      entry {
+        new csml.Raise {
+          event = new csml.Global { topic = "register"; data { ["workerId"] = "workerId" } }
+        }
+      }
+      on {
+        ["allRegistered"] = new csml.Transition {
+          to = "receiveWork"
+        }
+      }
+    }
+    ["receiveWork"] = new csml.State {
+      on {
+        ["work"] = new csml.Transition {
+          to = "endWork"
+          do {
+            new csml.Eval { expression = "n = ($r - $l) / $precision" }
+            new csml.Raise {
+              event = new csml.Global { topic = "workDone"; data { ["result"] = "accumArea" } }
+            }
+          }
+        }
+      }
+    }
+    ["endWork"] = new csml.Terminal {}
+  }
+}
