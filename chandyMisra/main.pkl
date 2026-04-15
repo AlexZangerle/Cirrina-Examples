@@ -1,0 +1,272 @@
+amends
+  "https://raw.githubusercontent.com/CollaborativeStateMachines/Cirrina/refs/heads/develop/src/main/resources/pkl/csm/csml.pkl"
+
+local n = 6
+
+collaborativeStateMachine {
+  stateMachines {
+    ["philosopher"] {
+      states {
+        ["hungry"] = new Initial {
+          entry {
+            new Log { message = "id + ' is hungry'" }
+            new Log { message = "id + ' Tokens: ' + hasLeftToken + ' ' + hasRightToken" }
+            new Log { message = "id + ' Forks:  ' + hasLeftFork + ' ' + hasRightFork" }
+            new Log { message = "id + ' Dirty:  ' + leftForkDirty + ' ' + rightForkDirty" }
+            new Match {
+              cases {
+                new Case {
+                  of = "!hasLeftFork && hasLeftToken"
+                  yields {
+                    new Log { message = "id + ' requesting left fork from ' + leftNeighbor" }
+                    new Eval { expression = "hasLeftToken = false" }
+                    new Emit {
+                      event { topic = "requestRightFork" }
+                      target = "leftNeighbor.toString()"
+                    }
+                  }
+                }
+                new Case {
+                  of = "!hasRightFork && hasRightToken"
+                  yields {
+                    new Log { message = "id + ' requesting right fork from ' + rightNeighbor" }
+                    new Eval { expression = "hasRightToken = false" }
+                    new Emit {
+                      event { topic = "requestLeftFork" }
+                      target = "rightNeighbor.toString()"
+                    }
+                  }
+                }
+              }
+            }
+            new Emit { event = new Internal { topic = "tryEat" } }
+          }
+          on {
+            ["tryEat"] {
+              to = "eating"
+              provided = "hasLeftFork && hasRightFork"
+            }
+            ["giveLeftFork"] {
+              yields {
+                new Eval { expression = "hasLeftFork = true; leftForkDirty = false" }
+                new Log {
+                  message = "id + ' received LEFT fork, forks: ' + hasLeftFork + ' ' + hasRightFork"
+                }
+                new Emit { event = new Internal { topic = "tryEat" } }
+              }
+            }
+            ["giveRightFork"] {
+              yields {
+                new Eval { expression = "hasRightFork = true; rightForkDirty = false" }
+                new Log {
+                  message =
+                    "id + ' received RIGHT fork, forks: ' + hasLeftFork + ' ' + hasRightFork"
+                }
+                new Emit { event = new Internal { topic = "tryEat" } }
+              }
+            }
+            ["requestLeftFork"] {
+              yields {
+                new Eval { expression = "hasLeftToken = true" }
+                new Match {
+                  cases {
+                    new Case {
+                      of = "hasLeftFork && leftForkDirty"
+                      yields {
+                        new Log {
+                          message = "id + ' surrendering dirty LEFT fork to ' + leftNeighbor"
+                        }
+                        new Eval { expression = "hasLeftFork = false" }
+                        new Emit {
+                          event { topic = "giveRightFork" }
+                          target = "leftNeighbor.toString()"
+                        }
+                        new Eval { expression = "hasLeftToken = false" }
+                        new Emit {
+                          event { topic = "requestRightFork" }
+                          target = "leftNeighbor.toString()"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            ["requestRightFork"] {
+              yields {
+                new Eval { expression = "hasRightToken = true" }
+                new Match {
+                  cases {
+                    new Case {
+                      of = "hasRightFork && rightForkDirty"
+                      yields {
+                        new Log {
+                          message = "id + ' surrendering dirty RIGHT fork to ' + rightNeighbor"
+                        }
+                        new Eval { expression = "hasRightFork = false" }
+                        new Emit {
+                          event { topic = "giveLeftFork" }
+                          target = "rightNeighbor.toString()"
+                        }
+                        new Eval { expression = "hasRightToken = false" }
+                        new Emit {
+                          event { topic = "requestLeftFork" }
+                          target = "rightNeighbor.toString()"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        ["eating"] {
+          static { ["meals"] = "0" }
+          entry {
+            new Log { message = "id + ' EATING (meals so far: ' + meals + ')'" }
+          }
+          after {
+            ["eating"] = new Timeout {
+              delay = "std:randomAround(10,2)"
+              triggers = new Emit { event = new Internal { topic = "ate" } }
+            }
+          }
+          on {
+            ["ate"] {
+              to = "thinking"
+              yields {
+                new Eval { expression = "++meals" }
+                new Ctr { counter = "philosopher.meals"; tags { ["id"] = "id.toString()" } }
+                new Eval { expression = "leftForkDirty = true; rightForkDirty = true" }
+                new Log {
+                  message =
+                    "id + ' done eating, deferred: L=' + hasLeftToken + ' R=' + hasRightToken"
+                }
+                new Match {
+                  cases {
+                    new Case {
+                      of = "hasLeftToken && hasLeftFork"
+                      yields {
+                        new Log { message = "id + ' fulfilling deferred LEFT to ' + leftNeighbor" }
+                        new Eval { expression = "hasLeftFork = false" }
+                        new Emit {
+                          event { topic = "giveRightFork" }
+                          target = "leftNeighbor.toString()"
+                        }
+                      }
+                    }
+                    new Case {
+                      of = "hasRightToken && hasRightFork"
+                      yields {
+                        new Log {
+                          message = "id + ' fulfilling deferred RIGHT to ' + rightNeighbor"
+                        }
+                        new Eval { expression = "hasRightFork = false" }
+                        new Emit {
+                          event { topic = "giveLeftFork" }
+                          target = "rightNeighbor.toString()"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            ["requestLeftFork"] {
+              yields {
+                new Log { message = "id + ' deferring LEFT fork request (eating)'" }
+                new Eval { expression = "hasLeftToken = true" }
+              }
+            }
+            ["requestRightFork"] {
+              yields {
+                new Log { message = "id + ' deferring RIGHT fork request (eating)'" }
+                new Eval { expression = "hasRightToken = true" }
+              }
+            }
+          }
+        }
+        ["thinking"] {
+          entry {
+            new Log { message = "id + ' thinking'" }
+          }
+          after {
+            ["thinking"] = new Timeout {
+              delay = "std:randomAround(10,2)"
+              triggers = new Emit { event = new Internal { topic = "thought" } }
+            }
+          }
+          on {
+            ["thought"] {
+              to = "hungry"
+            }
+            ["requestLeftFork"] {
+              yields {
+                new Eval { expression = "hasLeftToken = true" }
+                new Match {
+                  cases {
+                    new Case {
+                      of = "hasLeftFork && leftForkDirty"
+                      yields {
+                        new Log {
+                          message = "id + ' surrendering LEFT fork (thinking) to ' + leftNeighbor"
+                        }
+                        new Eval { expression = "hasLeftFork = false" }
+                        new Emit {
+                          event { topic = "giveRightFork" }
+                          target = "leftNeighbor.toString()"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            ["requestRightFork"] {
+              yields {
+                new Eval { expression = "hasRightToken = true" }
+                new Match {
+                  cases {
+                    new Case {
+                      of = "hasRightFork && rightForkDirty"
+                      yields {
+                        new Log {
+                          message = "id + ' surrendering RIGHT fork (thinking) to ' + rightNeighbor"
+                        }
+                        new Eval { expression = "hasRightFork = false" }
+                        new Emit {
+                          event { topic = "giveLeftFork" }
+                          target = "rightNeighbor.toString()"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+instances {
+  for (i in IntSeq(0, n - 1)) {
+    ["\(i)"] {
+      stateMachineName = "philosopher"
+      data {
+        ["id"] = "\(i)"
+        ["hasLeftFork"] = "\(i) > (\(i) - 1 + \(n)) % \(n)"
+        ["hasRightFork"] = "\(i) > (\(i) + 1) % \(n)"
+        ["hasLeftToken"] = "\(i) < (\(i) - 1 + \(n)) % \(n)"
+        ["hasRightToken"] = "\(i) < (\(i) + 1) % \(n)"
+        ["leftForkDirty"] = "\(i) > (\(i) - 1 + \(n)) % \(n)"
+        ["rightForkDirty"] = "\(i) > (\(i) + 1) % \(n)"
+        ["leftNeighbor"] = "(\(i) - 1 + \(n)) % \(n)"
+        ["rightNeighbor"] = "(\(i) + 1) % \(n)"
+      }
+    }
+  }
+}
