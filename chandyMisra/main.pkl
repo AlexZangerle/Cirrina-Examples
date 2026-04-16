@@ -1,5 +1,5 @@
 amends
-  "https://raw.githubusercontent.com/CollaborativeStateMachines/Cirrina/refs/heads/develop/src/main/resources/pkl/csm/csml.pkl"
+  "https://raw.githubusercontent.com/Frnd-me/Cirrina/refs/heads/develop/src/main/resources/pkl/csm/csml.pkl"
 
 local n = 6
 
@@ -67,6 +67,9 @@ collaborativeStateMachine {
             }
             ["requestLeftFork"] {
               yields {
+                new Log {
+                  message = "id + ' received Left request from ' + leftNeighbor + ' (in hungry)'"
+                }
                 new Eval { expression = "hasLeftToken = true" }
                 new Match {
                   cases {
@@ -94,6 +97,9 @@ collaborativeStateMachine {
             }
             ["requestRightFork"] {
               yields {
+                new Log {
+                  message = "id + ' received RIGHT request from ' + rightNeighbor + ' (in hungry)'"
+                }
                 new Eval { expression = "hasRightToken = true" }
                 new Match {
                   cases {
@@ -119,6 +125,32 @@ collaborativeStateMachine {
                 }
               }
             }
+            //             ["join"] {
+            //               yields {
+            //                 new Match {
+            //                   cases {
+            //                     new Case {
+            //                       of = "rightNeighbor == 0"
+            //                       yields {
+            //                         new Eval {
+            //                           expression =
+            //                             "rightNeighbor = $id; hasRightFork = false; hasRightToken = true; rightDirty = true"
+            //                         }
+            //                       }
+            //                     }
+            //                     new Case {
+            //                       of = "id == 0"
+            //                       yields {
+            //                         new Eval {
+            //                           expression =
+            //                             "leftNeighbor = $id; hasLeftFork = false; hasLeftToken = true; leftDirty = true"
+            //                         }
+            //                       }
+            //                     }
+            //                   }
+            //                 }
+            //               }
+            //             }
           }
         }
         ["eating"] {
@@ -249,11 +281,72 @@ collaborativeStateMachine {
         }
       }
     }
+    //     ["instantiator"] {
+    //       states {
+    //         ["wait"] = new Initial {
+    //           on {
+    //             ["join"] {
+    //               yields { new Eval { expression = "--count" } }
+    //             }
+    //           }
+    //           always {
+    //             new Transition {
+    //               to = "instantiate"
+    //               provided = "count == 0"
+    //               yields { new Eval { expression = "count = \(n)" } }
+    //             }
+    //           }
+    //         }
+    //         ["instantiate"] = new State {
+    //           after {
+    //             ["instantiate"] = new Timeout {
+    //               delay = "1000"
+    //               triggers = new Emit { event = new Internal { topic = "instantiate" } }
+    //             }
+    //           }
+    //           on {
+    //             ["instantiate"] {
+    //               to = "wait"
+    //               yields {
+    //                 new Eval { expression = "lastInstantiated += \(n)" }
+    //                 new Instantiate {
+    //                   instances {
+    //                     ["lastInstantiated"] = new Instance {
+    //                       stateMachineName = "philosopher"
+    //                       data {
+    //                         ["id"] = "lastInstantiated"
+    //                         ["hasLeftFork"] = "true"
+    //                         ["hasRightFork"] = "true"
+    //                         ["hasLeftToken"] = "false"
+    //                         ["hasRightToken"] = "false"
+    //                         ["leftForkDirty"] = "true"
+    //                         ["rightForkDirty"] = "true"
+    //                         ["leftNeighbor"] = "lastInstantiated - 1"
+    //                         ["rightNeighbor"] = "0"
+    //                       }
+    //                     }
+    //                   }
+    //                 }
+    //                 new Emit { event { topic = "join"; data { ["id"] = "lastInstantiated" } } }
+    //               }
+    //             }
+    //           }
+    //         }
+    //       }
+    //     }
   }
 }
 
 instances {
   for (i in IntSeq(0, n - 1)) {
+    //     ["instantiator\(i)"] {
+    //       stateMachineName = "instantiator"
+    //       data {
+    //         ["id"] = "\(i)"
+    //         ["count"] = "\(i)"
+    //         ["lastInstantiated"] = "\(i)"
+    //       }
+    //     }
     ["\(i)"] {
       stateMachineName = "philosopher"
       data {
