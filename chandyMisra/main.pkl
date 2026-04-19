@@ -7,7 +7,24 @@ collaborativeStateMachine {
   stateMachines {
     ["philosopher"] {
       states {
-        ["hungry"] = new Initial {
+        ["ready"] = new Initial {
+          after {
+            ["startup"] = new Timeout {
+              delay = "2000"
+              triggers = new Emit { event = new Internal { topic = "go" } }
+            }
+          }
+          always {
+            new Transition {
+              to = "hungry"
+              provided = "id >= 6"
+            }
+          }
+          on {
+            ["go"] { to = "hungry" }
+          }
+        }
+        ["hungry"] = new State {
           entry {
             new Log { message = "id + ' is hungry'" }
             new Log { message = "id + ' Tokens: ' + hasLeftToken + ' ' + hasRightToken" }
@@ -16,32 +33,93 @@ collaborativeStateMachine {
             new Match {
               cases {
                 new Case {
-                  of = "!hasLeftFork && hasLeftToken"
+                  of = "hasPendingJoin"
                   yields {
-                    new Log { message = "id + ' requesting left fork from ' + leftNeighbor" }
-                    new Eval { expression = "hasLeftToken = false" }
-                    new Emit {
-                      event { topic = "requestRightFork" }
-                      target = "leftNeighbor.toString()"
+                    new Log { message = "id + ' processing pending join for ' + pendingJoinId" }
+                    new Match {
+                      cases {
+                        new Case {
+                          of = "rightNeighbor == 0 && pendingJoinId != id"
+                          yields {
+                            new Log { message = "id + ' updating rightNeighbor to ' + pendingJoinId" }
+                            new Eval { expression = "rightNeighbor = pendingJoinId; hasRightFork = false; hasRightToken = true; rightForkDirty = true" }
+                          }
+                        }
+                        new Case {
+                          of = "id == 0"
+                          yields {
+                            new Log { message = "id + ' updating leftNeighbor to ' + pendingJoinId" }
+                            new Eval { expression = "leftNeighbor = pendingJoinId; hasLeftFork = false; hasLeftToken = true; leftForkDirty = true" }
+                          }
+                        }
+                      }
+                    }
+                    new Eval { expression = "hasPendingJoin = false" }
+                  }
+                }
+              }
+            }
+            new Emit { event = new Internal { topic = "evaluateForks" } }
+          }
+          on {
+            ["evaluateForks"] {
+              yields {
+                new Match {
+                  cases {
+                    new Case {
+                      of = "!hasLeftFork && hasLeftToken"
+                      yields {
+                        new Log { message = "id + ' requesting left fork from ' + leftNeighbor" }
+                        new Eval { expression = "hasLeftToken = false" }
+                        new Emit {
+                          event { topic = "requestRightFork" }
+                          target = "leftNeighbor.toString()"
+                        }
+                      }
+                    }
+                    new Case {
+                      of = "!hasRightFork && hasRightToken"
+                      yields {
+                        new Log { message = "id + ' requesting right fork from ' + rightNeighbor" }
+                        new Eval { expression = "hasRightToken = false" }
+                        new Emit {
+                          event { topic = "requestLeftFork" }
+                          target = "rightNeighbor.toString()"
+                        }
+                      }
                     }
                   }
                 }
-                new Case {
-                  of = "!hasRightFork && hasRightToken"
-                  yields {
-                    new Log { message = "id + ' requesting right fork from ' + rightNeighbor" }
-                    new Eval { expression = "hasRightToken = false" }
-                    new Emit {
-                      event { topic = "requestLeftFork" }
-                      target = "rightNeighbor.toString()"
+                new Emit { event = new Internal { topic = "tryEat" } }
+              }
+            }
+
+            ["join"] {
+              yields {
+                new Log { message = "id + ' received join for ' + $id + ' (in hungry)'" }
+                new Match {
+                  cases {
+                    new Case {
+                      of = "rightNeighbor == 0 && $id != id"
+                      yields {
+                        new Log { message = "id + ' instantly updating rightNeighbor to ' + $id" }
+                        new Eval { expression = "rightNeighbor = $id; hasRightFork = false; hasRightToken = true; rightForkDirty = true" }
+                        new Emit { event = new Internal { topic = "evaluateForks" } }
+                      }
+                    }
+                    new Case {
+                      of = "id == 0"
+                      yields {
+                        new Log { message = "id + ' instantly updating leftNeighbor to ' + $id" }
+                        new Eval { expression = "leftNeighbor = $id; hasLeftFork = false; hasLeftToken = true; leftForkDirty = true" }
+                        new Emit { event = new Internal { topic = "evaluateForks" } }
+                      }
                     }
                   }
                 }
               }
             }
-            new Emit { event = new Internal { topic = "tryEat" } }
-          }
-          on {
+
             ["tryEat"] {
               to = "eating"
               provided = "hasLeftFork && hasRightFork"
@@ -49,36 +127,27 @@ collaborativeStateMachine {
             ["giveLeftFork"] {
               yields {
                 new Eval { expression = "hasLeftFork = true; leftForkDirty = false" }
-                new Log {
-                  message = "id + ' received LEFT fork, forks: ' + hasLeftFork + ' ' + hasRightFork"
-                }
+                new Log { message = "id + ' received LEFT fork, forks: ' + hasLeftFork + ' ' + hasRightFork" }
                 new Emit { event = new Internal { topic = "tryEat" } }
               }
             }
             ["giveRightFork"] {
               yields {
                 new Eval { expression = "hasRightFork = true; rightForkDirty = false" }
-                new Log {
-                  message =
-                    "id + ' received RIGHT fork, forks: ' + hasLeftFork + ' ' + hasRightFork"
-                }
+                new Log { message = "id + ' received RIGHT fork, forks: ' + hasLeftFork + ' ' + hasRightFork" }
                 new Emit { event = new Internal { topic = "tryEat" } }
               }
             }
             ["requestLeftFork"] {
               yields {
-                new Log {
-                  message = "id + ' received Left request from ' + leftNeighbor + ' (in hungry)'"
-                }
+                new Log { message = "id + ' received Left request from ' + leftNeighbor + ' (in hungry)'" }
                 new Eval { expression = "hasLeftToken = true" }
                 new Match {
                   cases {
                     new Case {
                       of = "hasLeftFork && leftForkDirty"
                       yields {
-                        new Log {
-                          message = "id + ' surrendering dirty LEFT fork to ' + leftNeighbor"
-                        }
+                        new Log { message = "id + ' surrendering dirty LEFT fork to ' + leftNeighbor" }
                         new Eval { expression = "hasLeftFork = false" }
                         new Emit {
                           event { topic = "giveRightFork" }
@@ -97,18 +166,14 @@ collaborativeStateMachine {
             }
             ["requestRightFork"] {
               yields {
-                new Log {
-                  message = "id + ' received RIGHT request from ' + rightNeighbor + ' (in hungry)'"
-                }
+                new Log { message = "id + ' received RIGHT request from ' + rightNeighbor + ' (in hungry)'" }
                 new Eval { expression = "hasRightToken = true" }
                 new Match {
                   cases {
                     new Case {
                       of = "hasRightFork && rightForkDirty"
                       yields {
-                        new Log {
-                          message = "id + ' surrendering dirty RIGHT fork to ' + rightNeighbor"
-                        }
+                        new Log { message = "id + ' surrendering dirty RIGHT fork to ' + rightNeighbor" }
                         new Eval { expression = "hasRightFork = false" }
                         new Emit {
                           event { topic = "giveLeftFork" }
@@ -125,32 +190,6 @@ collaborativeStateMachine {
                 }
               }
             }
-            //             ["join"] {
-            //               yields {
-            //                 new Match {
-            //                   cases {
-            //                     new Case {
-            //                       of = "rightNeighbor == 0"
-            //                       yields {
-            //                         new Eval {
-            //                           expression =
-            //                             "rightNeighbor = $id; hasRightFork = false; hasRightToken = true; rightDirty = true"
-            //                         }
-            //                       }
-            //                     }
-            //                     new Case {
-            //                       of = "id == 0"
-            //                       yields {
-            //                         new Eval {
-            //                           expression =
-            //                             "leftNeighbor = $id; hasLeftFork = false; hasLeftToken = true; leftDirty = true"
-            //                         }
-            //                       }
-            //                     }
-            //                   }
-            //                 }
-            //               }
-            //             }
           }
         }
         ["eating"] {
@@ -217,6 +256,12 @@ collaborativeStateMachine {
                 new Eval { expression = "hasRightToken = true" }
               }
             }
+            ["join"] {
+              yields {
+                new Log { message = "id + ' received join for ' + $id + ' (in eating)'" }
+                new Eval { expression = "hasPendingJoin = true; pendingJoinId = $id" }
+              }
+            }
           }
         }
         ["thinking"] {
@@ -277,76 +322,91 @@ collaborativeStateMachine {
                 }
               }
             }
+            ["join"] {
+              yields {
+                new Log { message = "id + ' received join for ' + $id + ' (in thinking)'" }
+                new Eval { expression = "hasPendingJoin = true; pendingJoinId = $id" }
+              }
+            }
           }
         }
       }
     }
-    //     ["instantiator"] {
-    //       states {
-    //         ["wait"] = new Initial {
-    //           on {
-    //             ["join"] {
-    //               yields { new Eval { expression = "--count" } }
-    //             }
-    //           }
-    //           always {
-    //             new Transition {
-    //               to = "instantiate"
-    //               provided = "count == 0"
-    //               yields { new Eval { expression = "count = \(n)" } }
-    //             }
-    //           }
-    //         }
-    //         ["instantiate"] = new State {
-    //           after {
-    //             ["instantiate"] = new Timeout {
-    //               delay = "1000"
-    //               triggers = new Emit { event = new Internal { topic = "instantiate" } }
-    //             }
-    //           }
-    //           on {
-    //             ["instantiate"] {
-    //               to = "wait"
-    //               yields {
-    //                 new Eval { expression = "lastInstantiated += \(n)" }
-    //                 new Instantiate {
-    //                   instances {
-    //                     ["lastInstantiated"] = new Instance {
-    //                       stateMachineName = "philosopher"
-    //                       data {
-    //                         ["id"] = "lastInstantiated"
-    //                         ["hasLeftFork"] = "true"
-    //                         ["hasRightFork"] = "true"
-    //                         ["hasLeftToken"] = "false"
-    //                         ["hasRightToken"] = "false"
-    //                         ["leftForkDirty"] = "true"
-    //                         ["rightForkDirty"] = "true"
-    //                         ["leftNeighbor"] = "lastInstantiated - 1"
-    //                         ["rightNeighbor"] = "0"
-    //                       }
-    //                     }
-    //                   }
-    //                 }
-    //                 new Emit { event { topic = "join"; data { ["id"] = "lastInstantiated" } } }
-    //               }
-    //             }
-    //           }
-    //         }
-    //       }
-    //     }
+    ["instantiator"] {
+      states {
+        ["wait"] = new Initial {
+          always {
+            new Transition {
+              to = "instantiate"
+              provided = "count == 0"
+              yields {
+                new Eval { expression = "count = \(n)"}
+              }
+            }
+          }
+          on {
+            ["join"] {
+              to = "wait"
+              yields {
+                new Eval { expression = "count = \(n)"}
+              }
+            }
+          }
+        }
+        ["instantiate"] {
+          after {
+            ["instantiate"] = new Timeout {
+              delay = "5000"
+              triggers = new Emit { event = new Internal { topic = "instantiate" } }
+            }
+          }
+          on {
+            ["instantiate"] {
+              yields {
+                new Eval { expression = "lastInstantiated += \(n)" }
+                new Log {
+                  message = "'instantiator ' + id + ' spawning sm philosopher' + lastInstantiated "
+                }
+                new Instantiate {
+                  instances {
+                    ["lastInstantiated.toString()"] = new Instance {
+                      stateMachineName = "philosopher"
+                      data {
+                        ["id"] = "lastInstantiated"
+                        ["hasLeftFork"] = "true"
+                        ["hasRightFork"] = "true"
+                        ["hasLeftToken"] = "false"
+                        ["hasRightToken"] = "false"
+                        ["leftForkDirty"] = "true"
+                        ["rightForkDirty"] = "true"
+                        ["leftNeighbor"] = "lastInstantiated - 1"
+                        ["rightNeighbor"] = "0"
+                        ["hasPendingJoin"] = "false"
+                        ["pendingJoinId"] = "0"
+                      }
+                    }
+                  }
+                }
+                new Emit { event { topic = "join"; data { ["id"] = "lastInstantiated" } } }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
 
 instances {
   for (i in IntSeq(0, n - 1)) {
-    //     ["instantiator\(i)"] {
-    //       stateMachineName = "instantiator"
-    //       data {
-    //         ["id"] = "\(i)"
-    //         ["count"] = "\(i)"
-    //         ["lastInstantiated"] = "\(i)"
-    //       }
-    //     }
+    ["instantiator\(i)"] {
+      stateMachineName = "instantiator"
+      data {
+        ["id"] = "\(i)"
+        ["count"] = "\(i)"
+        ["lastInstantiated"] = "\(i)"
+      }
+    }
     ["\(i)"] {
       stateMachineName = "philosopher"
       data {
@@ -359,6 +419,8 @@ instances {
         ["rightForkDirty"] = "\(i) > (\(i) + 1) % \(n)"
         ["leftNeighbor"] = "(\(i) - 1 + \(n)) % \(n)"
         ["rightNeighbor"] = "(\(i) + 1) % \(n)"
+        ["hasPendingJoin"] = "false"
+        ["pendingJoinId"] = "0"
       }
     }
   }
